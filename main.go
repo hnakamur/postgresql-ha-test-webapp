@@ -39,14 +39,14 @@ func main() {
 				Usage:   "listen address (ex. :8080)",
 			},
 			&cli.StringFlag{
-				Name:    "conninfo",
-				Aliases: []string{"c"},
-				// Required: true,
-				Usage: "PostgreSQL connection string",
+				Name:    "database",
+				Aliases: []string{"d"},
+				Usage:   `PostgreSQL connection string (ex. "postgres://username:password@localhost:5432/database_name")`,
+				EnvVars: []string{"DATABASE_URL"},
 			},
 		},
 		Action: func(cCtx *cli.Context) error {
-			return execMainCommand(cCtx.Context, cCtx.String("listen"), cCtx.String("conninfo"))
+			return execMainCommand(cCtx.Context, cCtx.String("listen"), cCtx.String("database"))
 		},
 	}
 	app.UsageText = fmt.Sprintf("%s [GLOBAL OPTIONS]", app.Name)
@@ -75,12 +75,15 @@ func run(app *cli.App, args []string) error {
 
 const gracefulShutdownTimeout = time.Minute
 
-func execMainCommand(ctx context.Context, listenAddr, connInfo string) error {
+func execMainCommand(ctx context.Context, listenAddr, databaseURL string) (err error) {
+	myApp, err := newMyApp(ctx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer myApp.closeDB()
+
 	e := echo.New()
-	e.GET("/", func(c echo.Context) error {
-		time.Sleep(5 * time.Second)
-		return c.String(http.StatusOK, "Hello, World!\n")
-	})
+	myApp.addHandlers(e)
 	s := http.Server{
 		Addr:    listenAddr,
 		Handler: e,
